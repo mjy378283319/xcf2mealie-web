@@ -1,0 +1,22 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+
+# 凭据 / 本地配置
+.env
+.env.local
+.mealie_env
+urls.txt
+data/
+*.log
+
+# IDE
+.idea/
+.vscode/
+.DS_Store
+
+# Docker
+*.tmp
