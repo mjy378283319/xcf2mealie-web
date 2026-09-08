@@ -792,6 +792,7 @@ class Mealie:
         self._units_loaded = False
         self._tags: dict = None          # name -> {"id","name","slug"}
         self._cats: dict = None
+        self._existing: dict | None = None   # "u:<orgURL>" / "n:<name>" -> (slug, name)
 
     # -- 基础请求 -------------------------------------------------------- #
     def _url(self, path: str) -> str:
@@ -850,6 +851,53 @@ class Mealie:
         except Exception as exc:
             print(f"  [warn] 无法连接 Mealie：{exc}")
             return None
+
+    # -- 去重：判断菜谱是否已在 Mealie 里 -------------------------------- #
+    def _load_existing(self) -> None:
+        """拉一遍 Mealie 里已有菜谱，建立 orgURL / name -> (slug, name) 索引。
+
+        只拉一次并缓存。拉取失败时索引为空 dict，find_existing 恒返回 None，
+        等于降级为「不去重」，不会中断导入。
+        """
+        if self._existing is not None:
+            return
+        index: dict[str, tuple[str, str]] = {}
+        try:
+            page, per = 1, 200
+            while True:
+                data = self._req("GET", f"/recipes?page={page}&perPage={per}") or {}
+                items = data.get("items", []) if isinstance(data, dict) else []
+                for it in items:
+                    nm = (it.get("name") or "").strip()
+                    sl = (it.get("slug") or "").strip()
+                    ou = (it.get("orgURL") or "").strip()
+                    if nm:
+                        index.setdefault("n:" + nm, (sl, nm))
+                    if ou:
+                        index.setdefault("u:" + ou, (sl, nm))
+                total = data.get("total", 0) if isinstance(data, dict) else 0
+                if len(items) < per or (total and page * per >= total):
+                    break
+                page += 1
+        except Exception as exc:
+            print(f"  [warn] 读取已有菜谱失败，本次不做去重：{str(exc)[:90]}")
+            index = {}
+        self._existing = index
+
+    def find_existing(self, name: str | None = None, org_url: str | None = None):
+        """返回 (slug, name)；没命中返回 None。orgURL 优先于 name 匹配。"""
+        self._load_existing()
+        if not self._existing:
+            return None
+        if org_url:
+            hit = self._existing.get("u:" + org_url.strip())
+            if hit:
+                return hit
+        if name:
+            hit = self._existing.get("n:" + name.strip())
+            if hit:
+                return hit
+        return None
 
     # -- 食材 / 单位：先建好再按 id 引用 ----------------------------- #
     # 直接把 {"name": "xxx"} 塞进 recipeIngredient 让 Mealie 自动创建，在 nightly 会抛
@@ -1201,9 +1249,23 @@ def cmd_push(args) -> int:
     base_dir = args.target if os.path.isdir(args.target) else os.path.dirname(args.target) or "."
 
     ok = 0
+    skipped = 0
+    # --force 优先级最高：强制重导时关闭去重
+    skip_existing = getattr(args, "skip_existing", True) and not getattr(args, "force", False)
+    if skip_existing:
+        print("[去重] 已开启：Mealie 中同 orgURL 或同名的菜谱将自动跳过（--force 可强制重导）\n")
     for rec in recs:
         name = rec.get("name") or "未命名"
         try:
+            # 去重：Mealie 里已存在的直接跳过去（默认开启；--force 可强制重导）
+            if skip_existing:
+                hit = mealie.find_existing(name=name, org_url=rec.get("source_url") or rec.get("orgURL"))
+                if hit:
+                    existed_slug, existed_name = hit
+                    print(f"[push] {name}")
+                    print(f"    已存在于 Mealie，跳过：{existed_name} -> {mealie.base}/g/home/r/{existed_slug}")
+                    skipped += 1
+                    continue
             print(f"[push] {name}")
             slug = mealie.create(name)
             print(f"    created slug = {slug}")
@@ -1299,8 +1361,14 @@ def cmd_push(args) -> int:
             ok += 1
         except Exception as exc:
             print(f"    [error] {name}: {exc}")
-    print(f"\n完成：{ok}/{len(recs)}")
-    return 0 if ok else 1
+    total = len(recs)
+    failed = total - ok - skipped
+    if skipped:
+        print(f"\n完成：新增 {ok} / 跳过已存在 {skipped} / 失败 {failed} / 共 {total}")
+    else:
+        print(f"\n完成：{ok}/{total}" + (f"（失败 {failed}）" if failed else ""))
+    # 全部被「跳过」不算失败；只有真正出错（failed>0）才返回非 0
+    return 0 if failed == 0 else 1
 
 
 def cmd_run(args) -> int:
@@ -1309,7 +1377,6 @@ def cmd_run(args) -> int:
     if rc != 0:
         return rc
     args.target = args.out
-    args.dry_run = False
     return cmd_push(args)
 
 
@@ -1342,7 +1409,10 @@ def main(argv=None) -> int:
     pu.add_argument("--category", action="append", default=[], help="追加分类，可重复")
     pu.add_argument("--no-step-images", dest="step_images", action="store_false", help="跳过步骤图")
     pu.add_argument("--dry-run", action="store_true", help="只打印 payload，不写入")
-    pu.set_defaults(step_images=True, func=cmd_push)
+    pu.add_argument("--force", action="store_true", help="即使 Mealie 中已存在同名/同源菜谱也重新导入")
+    pu.add_argument("--no-skip-existing", dest="skip_existing", action="store_false",
+                    help="关闭去重，每条都重新创建（可能产生重复菜谱）")
+    pu.set_defaults(step_images=True, skip_existing=True, func=cmd_push)
 
     es = sub.add_parser("estimate", help="给已抓取的 JSON 补算营养与时间")
     es.add_argument("target", nargs="+", help="JSON 文件或目录")
@@ -1360,7 +1430,11 @@ def main(argv=None) -> int:
     r.add_argument("--tag", action="append", default=[])
     r.add_argument("--category", action="append", default=[])
     r.add_argument("--no-step-images", dest="step_images", action="store_false")
-    r.set_defaults(images=True, step_images=True, func=cmd_run)
+    r.add_argument("--dry-run", action="store_true", help="只打印 payload，不写入")
+    r.add_argument("--force", action="store_true", help="即使 Mealie 中已存在同名/同源菜谱也重新导入")
+    r.add_argument("--no-skip-existing", dest="skip_existing", action="store_false",
+                   help="关闭去重，每条都重新创建（可能产生重复菜谱）")
+    r.set_defaults(images=True, step_images=True, skip_existing=True, func=cmd_run)
 
     args = p.parse_args(argv)
 

@@ -12,6 +12,15 @@ venv/
 urls.txt
 data/
 *.log
+gh_token.txt
+
+# 本地推送脚本（可能内含 Token，绝不能提交）
+_push.*
+_push_*.sh
+_push_*.bat
+
+# OS
+Thumbs.db
 
 # IDE
 .idea/

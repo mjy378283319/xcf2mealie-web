@@ -10,7 +10,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-COPY xcf2mealie.py app.py ./
+COPY xcf2mealie.py app.py healthcheck.py ./
 
 # 默认端口（可在 docker run -e PORT=xxxx 或 compose environment 覆盖）
 ENV PORT=9926 \
@@ -20,7 +20,6 @@ ENV PORT=9926 \
 EXPOSE 9926
 
 HEALTHCHECK --interval=60s --timeout=5s --start-period=10s --retries=3 \
-    CMD python -c "import urllib.request,sys; \
-urllib.request.urlopen('http://127.0.0.1:'+__import__('os').environ.get('PORT','9926')+'/', timeout=3); sys.exit(0)" || exit 1
+    CMD python healthcheck.py || exit 1
 
 CMD ["python", "app.py"]

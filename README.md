@@ -13,19 +13,22 @@
 - 🥗 **营养估算**：按《中国食物成分表》估算 11 项营养指标
 - ⏱️ **时间估算**：prep / cook / total 自动计算
 - 🏷️ **tags / 分类 / 封面**：源页结构化信息全保留
-- 🔐 **安全**：Token 走容器环境变量，不进镜像
+- ♻️ **自动去重**：Mealie 里已存在的菜谱自动跳过，不会重复添加（可强制覆盖）
+- 🔐 **双重安全**：Token 走容器环境变量不进镜像；页面可加账号密码，**兼容 Bitwarden 自动填充**
 - 🐳 **多架构镜像**：自动构建 `linux/amd64` + `linux/arm64`（Unraid x86_64 直接用）
 
 ## 🚀 快速开始（docker run）
 
 ```bash
 docker run -d \
-  --name xcf2mealie \
+  --name xcf2mealie-web \
   --restart unless-stopped \
   -p 9926:9926 \
   -e MEALIE_URL=https://your-mealie.example.com/ \
   -e MEALIE_TOKEN=eyJhbGciOi... \
-  ghcr.io/YOURNAME/xcf2mealie:latest
+  -e WEB_USER=admin \
+  -e WEB_PASSWORD=换成你的密码 \
+  ghcr.io/mjy378283319/xcf2mealie-web:latest
 ```
 
 浏览器打开 `http://your-host:9926`，粘贴下厨房链接，点"确定导入"即可。
@@ -70,8 +73,46 @@ docker run -d --name xcf2mealie -p 9926:9926 \
 |---|---|---|
 | `MEALIE_URL` | ✅ | Mealie 实例完整 URL，如 `https://cd.example.com:9443/` |
 | `MEALIE_TOKEN` | ✅ | Mealie「用户设置 → API Tokens → Long Lived Token」 |
+| `WEB_USER` | ❌ | 页面登录用户名。**与 `WEB_PASSWORD` 同时设置才启用登录**，不设则任何人可访问 |
+| `WEB_PASSWORD` | ❌ | 页面登录密码（也可写作 `WEB_PASS`） |
 | `DEFAULT_TAG` | ❌ | 每个菜谱默认追加的标签，默认 `下厨房` |
 | `PORT` | ❌ | Web UI 端口，默认 `9926` |
+
+## 🔑 登录保护 + Bitwarden 自动填充
+
+设置 `WEB_USER` + `WEB_PASSWORD` 重启容器后，访问页面会弹出浏览器原生登录框。
+这种标准 **HTTP Basic Auth** 弹框能被密码管理器完美识别：
+
+在 Bitwarden 里新建一条登录项：
+
+| 字段 | 填什么 |
+|---|---|
+| 名称 | `xcf2mealie-web` |
+| 用户名 | 你设的 `WEB_USER` |
+| 密码 | 你设的 `WEB_PASSWORD` |
+| URI | `http://192.168.x.x:9926`（你的实际访问地址，端口要带上） |
+
+保存后再打开页面，Bitwarden 就会提示自动填充。手机端 Bitwarden 同样可用。
+
+> 未设置这两个变量时页面免登录，首页顶部会显示黄色提醒条。
+
+## ♻️ 去重逻辑
+
+导入前会先拉取 Mealie 里已有菜谱建立索引，按下面顺序比对：
+
+1. **源链接**（`orgURL`）——最准，同一个下厨房链接只导入一次
+2. **菜名**——完全同名则跳过
+
+命中的菜谱会显示「已存在于 Mealie，跳过」并跳过后续步骤，不再重复添加。
+页面上的「跳过 Mealie 中已存在的菜谱」复选框默认勾选；**取消勾选则强制重新导入**（会产生重复条目，仅在确实要覆盖时用）。
+
+对应命令行参数：
+
+| 参数 | 作用 |
+|---|---|
+| （默认） | 自动跳过已存在菜谱 |
+| `--force` | 强制重新导入，忽略已存在 |
+| `--no-skip-existing` | 关闭去重（等价 `--force`） |
 
 ## 🔧 故障排查
 
@@ -85,11 +126,9 @@ docker run -d --name xcf2mealie -p 9926:9926 \
 
 ```
 xcf2mealie_web/
-├── app.py                 # Flask 主程序（Web UI 后端）
+├── app.py                 # Flask 主程序（UI 内联 + Basic Auth + 去重开关）
 ├── xcf2mealie.py          # 核心导入逻辑（命令行工具）
-├── templates/
-│   ├── index.html         # 首页：链接输入 + 提交
-│   └── result.html        # 导入结果页
+├── healthcheck.py         # 容器健康检查（开启登录时 401 也判健康）
 ├── requirements.txt       # Python 依赖（仅 flask）
 ├── Dockerfile             # 镜像构建
 ├── docker-compose.yml     # compose 部署（可选）
@@ -101,6 +140,8 @@ xcf2mealie_web/
 ├── UNRAID_安装指南.md     # 详细汉化 Unraid 安装步骤
 └── .gitignore
 ```
+
+> 页面 HTML 直接内联在 `app.py` 里（不依赖 `templates/` 目录），单文件即可跑。
 
 ## 📜 许可
 

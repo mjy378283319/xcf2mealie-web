@@ -1,8 +1,7 @@
 services:
   xcf2mealie:
-    build: .
-    image: ghcr.io/YOURNAME/xcf2mealie:latest
-    container_name: xcf2mealie
+    image: ghcr.io/mjy378283319/xcf2mealie-web:latest
+    container_name: xcf2mealie-web
     restart: unless-stopped
     ports:
       - "9926:9926"
@@ -10,12 +9,10 @@ services:
       # === 必填：你的 Mealie 地址与 Token ===
       MEALIE_URL: "https://cd.109622.xyz:9443/"
       MEALIE_TOKEN: "eyJhbGciOi...换成你的Token"
+      # === 可选：页面登录账号（两个都设置才会启用 Basic Auth）===
+      WEB_USER: ""
+      WEB_PASSWORD: ""
       # === 可选：默认追加的标签 ===
       DEFAULT_TAG: "下厨房"
       # === 可选：自定义端口 ===
       PORT: "9926"
-    healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:9926/', timeout=3)"]
-      interval: 60s
-      timeout: 5s
-      retries: 3
