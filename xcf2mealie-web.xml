@@ -1,0 +1,43 @@
+<?xml version="1.0"?>
+<!--
+  Unraid Docker 容器模板：xcf2mealie-web
+  仓库：https://github.com/mjy378283319/xcf2mealie-web
+
+  在 Unraid 里加载方式（任选其一）：
+    1) Docker 页面 → Template Repositories 填 https://github.com/mjy378283319/xcf2mealie-web → 保存
+    2) Add Container → 顶部 Template 处直接粘贴本文件 URL
+    3) 直接下载到 /boot/config/plugins/dockerMan/templates-user/
+
+  图标若因网络原因加载不出来，可把下面 <Icon> 换成 jsDelivr 镜像地址：
+    https://cdn.jsdelivr.net/gh/mjy378283319/xcf2mealie-web@main/assets/icon.png
+-->
+<Container version="2">
+  <Name>xcf2mealie-web</Name>
+  <Repository>ghcr.io/mjy378283319/xcf2mealie-web:latest</Repository>
+  <Registry>https://github.com/mjy378283319/xcf2mealie-web/pkgs/container/xcf2mealie-web</Registry>
+  <Network>bridge</Network>
+  <MyIP/>
+  <Shell>sh</Shell>
+  <Privileged>false</Privileged>
+  <Support>https://github.com/mjy378283319/xcf2mealie-web/issues</Support>
+  <Project>https://github.com/mjy378283319/xcf2mealie-web</Project>
+  <Overview>把下厨房（xiachufang.com）菜谱批量导入 Mealie 的极简 Web 工具。&#13;&#10;&#13;&#10;粘贴菜谱链接 → 点一次按钮，自动完成：抓取用料与步骤 → 按《中国食物成分表》估算 11 项营养 → 估算准备/烹饪/总时间 → 连步骤图一起写入 Mealie。&#13;&#10;&#13;&#10;[b]主要特性[/b]&#13;&#10;• 极简界面：一个粘贴框 + 一个按钮&#13;&#10;• 批量导入：一次粘贴多个链接，每行一个&#13;&#10;• 自动去重：已导入过的菜谱自动跳过，不会重复添加&#13;&#10;• 步骤图保留：自动下载并上传为 Mealie 菜谱资源&#13;&#10;• 登录保护：可设账号密码，兼容 Bitwarden 自动填充&#13;&#10;• 多架构镜像：amd64 / arm64&#13;&#10;&#13;&#10;[b]部署前提[/b]：需要有一个已运行的 Mealie 实例，并在 Mealie「用户设置 → API Tokens」生成长期 Token。</Overview>
+  <Category>Tools:Utilities</Category>
+  <WebUI>http://[IP]:[PORT:9926]/</WebUI>
+  <TemplateURL>https://raw.githubusercontent.com/mjy378283319/xcf2mealie-web/main/xcf2mealie-web.xml</TemplateURL>
+  <Icon>https://raw.githubusercontent.com/mjy378283319/xcf2mealie-web/main/assets/icon.png</Icon>
+  <ExtraParams/>
+  <PostArgs/>
+  <CPUset/>
+  <DateInstalled/>
+  <DonateText/>
+  <DonateLink/>
+  <Requires/>
+  <Config Name="WebUI 端口" Target="9926" Default="9926" Mode="tcp" Description="Web 界面端口，浏览器访问 http://你的UnraidIP:9926/。如与已有服务冲突可改主机端口。" Type="Port" Display="always" Required="true" Mask="false">9926</Config>
+  <Config Name="Mealie 地址" Target="MEALIE_URL" Default="" Mode="" Description="Mealie 实例的完整地址，结尾要带斜杠。例如 https://mealie.example.com/ 或 http://192.168.1.10:9925/" Type="Variable" Display="always" Required="true" Mask="false"></Config>
+  <Config Name="Mealie Token" Target="MEALIE_TOKEN" Default="" Mode="" Description="Mealie「用户设置 → API Tokens → Long Lived Token」生成的长期 Token，以 eyJ 开头。" Type="Variable" Display="always" Required="true" Mask="true"></Config>
+  <Config Name="登录用户名" Target="WEB_USER" Default="" Mode="" Description="本工具的页面登录用户名。与下面的密码同时填写才会启用登录页；两个都留空则任何人可访问。" Type="Variable" Display="always" Required="false" Mask="false"></Config>
+  <Config Name="登录密码" Target="WEB_PASSWORD" Default="" Mode="" Description="本工具的页面登录密码。浏览器可记住，Bitwarden 之类的密码管理器也能自动填充。" Type="Variable" Display="always" Required="false" Mask="true"></Config>
+  <Config Name="会话密钥" Target="SECRET_KEY" Default="" Mode="" Description="用于给登录会话签名。填一串随机字符即可；留空则每次容器重启都要重新登录。" Type="Variable" Display="advanced" Required="false" Mask="true"></Config>
+  <Config Name="默认标签" Target="DEFAULT_TAG" Default="下厨房" Mode="" Description="每个导入的菜谱都会打上这个标签，方便在 Mealie 里筛选。默认「下厨房」。" Type="Variable" Display="advanced" Required="false" Mask="false">下厨房</Config>
+</Container>

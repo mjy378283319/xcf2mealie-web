@@ -3,7 +3,7 @@
 > **下厨房（xiachufang.com）→ Mealie 批量导入工具，带极简 Web UI**
 > 粘贴链接、点确定，自动抓取 + 营养估算 + 推送到你的 Mealie。
 
-![界面示意](https://placeholder) <!-- 可在 README 加截图 -->
+<img src="assets/icon.png" width="112" alt="xcf2mealie-web 图标">
 
 ## ✨ 特性
 
@@ -61,11 +61,25 @@ docker run -d --name xcf2mealie -p 9926:9926 \
 
 ## 🏠 Unraid 部署
 
+### 方式一：从模板一键安装（推荐）
+
+Unraid 的 **Docker → 模板库（Template Repositories）** 填本仓库地址并保存，
+之后在「添加容器」的模板下拉里就能直接选到 `xcf2mealie-web`，所有端口和环境变量都会自动填好：
+
+```
+https://github.com/mjy378283319/xcf2mealie-web
+```
+
+模板文件：[`xcf2mealie-web.xml`](./xcf2mealie-web.xml)　·　图标：[`assets/icon.png`](./assets/icon.png)
+
+> 如果「添加容器」里找不到，可在 Docker 页面顶部 `+` 号处直接粘贴模板 URL：
+> `https://raw.githubusercontent.com/mjy378283319/xcf2mealie-web/main/xcf2mealie-web.xml`
+> 若该地址在你所在网络打不开，把模板里 `<Icon>` 换成 jsDelivr 镜像
+> `https://cdn.jsdelivr.net/gh/mjy378283319/xcf2mealie-web@main/assets/icon.png` 即可。
+
+### 方式二：手动添加容器
+
 详见 [`UNRAID_安装指南.md`](./UNRAID_安装指南.md)。
-
-## 🧩 界面截图位置
-
-启动后浏览器访问 `http://<host>:9926/`。
 
 ## ⚙️ 配置
 
@@ -136,6 +150,11 @@ xcf2mealie_web/
 ├── app.py                 # Flask 主程序（UI 内联 + 独立登录页/Session 鉴权 + 去重开关）
 ├── xcf2mealie.py          # 核心导入逻辑（命令行工具）
 ├── healthcheck.py         # 容器健康检查（登录页会 302，同样判为健康）
+├── assets/
+│   ├── icon.png           # 应用图标（Unraid 容器图标 + 网页 favicon）
+│   ├── icon.svg           # 图标的矢量版，同上几何
+│   └── make_icon.py       # 图标生成脚本（python assets/make_icon.py）
+├── xcf2mealie-web.xml     # Unraid Docker 模板（供模板库/添加容器直接读取）
 ├── requirements.txt       # Python 依赖（仅 flask）
 ├── Dockerfile             # 镜像构建
 ├── docker-compose.yml     # compose 部署（可选）
@@ -147,6 +166,9 @@ xcf2mealie_web/
 ├── UNRAID_安装指南.md     # 详细汉化 Unraid 安装步骤
 └── .gitignore
 ```
+
+> 图标改了之后重新跑一次 `python assets/make_icon.py` 即可同时更新 PNG 和 SVG，
+> 两者共用同一份几何常量，不会画得不一样。
 
 > 页面 HTML 直接内联在 `app.py` 里（不依赖 `templates/` 目录），单文件即可跑。
 

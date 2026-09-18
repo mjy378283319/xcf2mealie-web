@@ -5,7 +5,56 @@
 
 ---
 
-## 方式 1：Add Container（最简单，推荐）
+## 方式 1：从模板一键安装（最省事，推荐）
+
+本工具已经带了 Unraid 容器模板 `xcf2mealie-web.xml`，包含端口、全部环境变量和图标。
+不用一个个手填，Unraid 会自动把字段渲染成表单。
+
+### 步骤 1：把仓库加进模板库
+
+Unraid Web UI → 顶部 **Docker** → 拉到页面最下面 **模板库 / Template Repositories** →
+填入下面这行 → 点 **保存 / SAVE**：
+
+```
+https://github.com/mjy378283319/xcf2mealie-web
+```
+
+保存后 Unraid 会自动抓取模板，稍等几秒刷新页面。
+
+> 汉化版的按钮可能叫「模板存储库」或「模板仓库」，位置都在 Docker 页面底部。
+
+### 步骤 2：用模板添加容器
+
+**Docker → 添加容器（Add Container）** → 在 **模板 / Template** 下拉框里选 **xcf2mealie-web**。
+选中后，名称、镜像、端口、环境变量都会自动填好，你只需要补三项：
+
+| 字段 | 填什么 |
+|---|---|
+| **Mealie 地址** | 你的 Mealie 完整地址，**末尾带斜杠**，如 `https://cd.109622.xyz:9443/` |
+| **Mealie Token** | Mealie「用户设置 → API Tokens」的长期 Token |
+| **登录用户名 / 登录密码** | 想开登录页就都填上；留空则免登录 |
+
+> 选填：**会话密钥**（随便一串随机字符，填了以后容器重启不用重新登录）、**默认标签**（默认 `下厨房`）。
+> 这两个在「显示更多设置」里。
+
+### 步骤 3：应用
+
+点右下角 **应用 / Apply**，Unraid 会自动拉镜像并启动。
+
+### 图标加载不出来怎么办
+
+模板里的图标地址是 GitHub 原始文件地址，个别网络环境可能打不开（Docker 页面显示成默认灰图标，不影响使用）。
+这时把模板或容器设置里的 **图标 / Icon** 换成 jsDelivr 镜像地址即可：
+
+```
+https://cdn.jsdelivr.net/gh/mjy378283319/xcf2mealie-web@main/assets/icon.png
+```
+
+> 也可以用命令行直接把单个模板下载到 Unraid（见方式 4 的说明）。
+
+---
+
+## 方式 2：Add Container 手动填（模板加载不了时用）
 
 ### 步骤 1：进 Docker 页面
 Unraid Web UI → 顶部菜单 **Docker** → 页面底部 **添加容器**（Add Container）
@@ -97,7 +146,15 @@ http://你的UnraidIP:9926/
 
 ---
 
-## 方式 2：命令行（SSH）
+## 方式 3：命令行（SSH）
+
+> 如果模板库加载不了，也可以只把模板文件抓下来，之后在「添加容器」的模板下拉里就能选到它：
+> ```bash
+> mkdir -p /boot/config/plugins/dockerMan/templates-user
+> curl -Lo /boot/config/plugins/dockerMan/templates-user/my-xcf2mealie-web.xml \
+>   https://raw.githubusercontent.com/mjy378283319/xcf2mealie-web/main/xcf2mealie-web.xml
+> ```
+> 下载完刷新 Docker 页面，模板会出现在 **用户模板 / User templates** 分组里。
 
 ```bash
 # 1. SSH 进 Unraid
@@ -135,7 +192,7 @@ docker stop xcf2mealie-web && docker rm xcf2mealie-web
 
 ---
 
-## 方式 3：docker-compose（可选）
+## 方式 4：docker-compose（可选）
 
 把 `docker-compose.yml` 放到 Unraid 的 `/mnt/user/appdata/xcf2mealie-web/` 下，改好环境变量后：
 
@@ -167,6 +224,19 @@ Unraid：**Docker** → 点容器名 → **日志**；或命令行 `docker logs 
 - Unraid **设置 → 管理访问** 检查 9926 端口是否被允许
 - 检查路由器 / 防火墙
 - 容器内自测：`docker exec -it xcf2mealie-web python -c "import urllib.request;print(urllib.request.urlopen('http://127.0.0.1:9926/',timeout=3).status)"`
+
+### 图标显示成问号 / 灰色方块
+容器图标是 Unraid 从 GitHub 原始地址在线加载的，网络不通时就显示占位图，**不影响容器运行**。
+在容器设置里把 **图标 / Icon** 换成 jsDelivr 镜像即可：
+
+```
+https://cdn.jsdelivr.net/gh/mjy378283319/xcf2mealie-web@main/assets/icon.png
+```
+
+### 模板库里找不到 xcf2mealie-web
+- 模板库地址必须是 **仓库地址**：`https://github.com/mjy378283319/xcf2mealie-web`（末尾不要加 `/`，也不要写成 raw 文件地址）
+- 保存后稍等十几秒再刷新 Docker 页面（Unraid 是异步抓取的）
+- 实在不行用方式 3 里那段 `curl` 把模板单独下到 `/boot/config/plugins/dockerMan/templates-user/`
 
 ### 容器显示 unhealthy（红色 X）
 开启登录保护后，未登录访问首页会被**重定向**到 `/login`（HTTP 302），这是正常现象而非故障。

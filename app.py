@@ -20,10 +20,20 @@ import subprocess
 import tempfile
 from datetime import datetime, timedelta
 
-from flask import Flask, render_template_string, redirect, request, session, url_for
+from flask import (
+    Flask,
+    abort,
+    redirect,
+    render_template_string,
+    request,
+    send_file,
+    session,
+    url_for,
+)
 
 APP_DIR = os.path.dirname(os.path.abspath(__file__))
 SCRIPT = os.path.join(APP_DIR, "xcf2mealie.py")
+ICON_PATH = os.path.join(APP_DIR, "assets", "icon.png")
 DEFAULT_TAG = os.environ.get("DEFAULT_TAG", "下厨房")
 PORT = int(os.environ.get("PORT", "9926"))
 
@@ -53,6 +63,7 @@ INDEX_HTML = """<!doctype html>
 <meta charset="utf-8">
 <title>下厨房 → Mealie 批量导入</title>
 <meta name="viewport" content="width=device-width,initial-scale=1">
+<link rel="icon" href="/favicon.ico">
 <style>
   *{box-sizing:border-box}
   body{font-family:system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",sans-serif;max-width:820px;margin:32px auto;padding:0 16px;color:#222;background:#fafafa;line-height:1.55}
@@ -151,6 +162,7 @@ RESULT_HTML = """<!doctype html>
 <meta charset="utf-8">
 <title>导入结果 · 下厨房 → Mealie</title>
 <meta name="viewport" content="width=device-width,initial-scale=1">
+<link rel="icon" href="/favicon.ico">
 <style>
   *{box-sizing:border-box}
   body{font-family:system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",sans-serif;max-width:900px;margin:32px auto;padding:0 16px;color:#222;background:#fafafa;line-height:1.55}
@@ -210,6 +222,7 @@ LOGIN_HTML = """<!doctype html>
 <meta charset="utf-8">
 <title>登录 · 下厨房 → Mealie</title>
 <meta name="viewport" content="width=device-width,initial-scale=1">
+<link rel="icon" href="/favicon.ico">
 <style>
   *{box-sizing:border-box}
   body{font-family:system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",sans-serif;background:#fafafa;color:#222;margin:0;padding:48px 16px;line-height:1.55}
@@ -264,7 +277,7 @@ def _authorized(u: str, p: str) -> bool:
 def _require_auth():
     if not AUTH_ENABLED:
         return None
-    if request.endpoint in ("login", "logout", "static"):
+    if request.endpoint in ("login", "logout", "static", "favicon"):
         return None
     if session.get("authed"):
         return None
@@ -300,6 +313,14 @@ def login():
 def logout():
     session.clear()
     return redirect(url_for("login"))
+
+
+@app.route("/favicon.ico")
+def favicon():
+    """浏览器标签页图标，用的就是 assets/icon.png。"""
+    if not os.path.isfile(ICON_PATH):
+        abort(404)
+    return send_file(ICON_PATH, mimetype="image/png", max_age=86400)
 
 
 # --------------------------------------------------------------------------- #

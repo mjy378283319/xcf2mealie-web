@@ -1,0 +1,50 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <!-- xcf2mealie-web 应用图标：暖橙底 + 白厨师帽 + 导入箭头 -->
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#FFA452"/>
+      <stop offset="1" stop-color="#EC441A"/>
+    </linearGradient>
+    <linearGradient id="sheen" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#fff" stop-opacity="0.10"/>
+      <stop offset="0.45" stop-color="#fff" stop-opacity="0"/>
+    </linearGradient>
+    <clipPath id="round">
+      <rect x="0" y="0" width="512" height="512" rx="114" ry="114"/>
+    </clipPath>
+    <clipPath id="hat">
+      <g>
+    <circle cx="180.6" cy="240.4" r="67.6"/>
+    <circle cx="331.4" cy="240.4" r="67.6"/>
+    <circle cx="256.0" cy="191.0" r="83.2"/>
+    <polygon points="118.2,258.6 393.8,258.6 373.0,341.8 139.0,341.8"/>
+    <rect x="139.0" y="321.0" width="234.0" height="80.6" rx="20.8"/>
+      </g>
+    </clipPath>
+    <filter id="soft" x="-30%" y="-30%" width="160%" height="160%">
+      <feDropShadow dx="0" dy="9.1" stdDeviation="6.5"
+                    flood-color="#962A08" flood-opacity="0.30"/>
+    </filter>
+  </defs>
+
+  <g clip-path="url(#round)">
+    <rect width="512" height="512" fill="url(#bg)"/>
+    <rect width="512" height="512" fill="url(#sheen)"/>
+
+    <g fill="#FFFFFF" filter="url(#soft)">
+    <circle cx="180.6" cy="240.4" r="67.6"/>
+    <circle cx="331.4" cy="240.4" r="67.6"/>
+    <circle cx="256.0" cy="191.0" r="83.2"/>
+    <polygon points="118.2,258.6 393.8,258.6 373.0,341.8 139.0,341.8"/>
+    <rect x="139.0" y="321.0" width="234.0" height="80.6" rx="20.8"/>
+    </g>
+
+    <rect x="79.2" y="322.3" width="353.6"
+          height="13.0" fill="#EC441A" clip-path="url(#hat)"/>
+
+    <rect x="246.9" y="331.4"
+          width="18.2"
+          height="29.9" fill="#EC441A"/>
+    <polygon points="231.3,357.4 280.7,357.4 256.0,388.6" fill="#EC441A"/>
+  </g>
+</svg>

@@ -11,6 +11,8 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 COPY xcf2mealie.py app.py healthcheck.py ./
+# 应用图标：既作为网页 favicon 提供，也让镜像自身带上品牌资源
+COPY assets/icon.png ./assets/icon.png
 
 # 默认端口（可在 docker run -e PORT=xxxx 或 compose environment 覆盖）
 ENV PORT=9926 \
