@@ -28,9 +28,10 @@ Unraid Web UI → 顶部菜单 **Docker** → 页面底部 **添加容器**（Ad
 |---|---|---|---|
 | `MEALIE_URL` | `https://cd.109622.xyz:9443/` | ✅ | 你的 Mealie 完整地址，**末尾要带斜杠** |
 | `MEALIE_TOKEN` | `eyJhbGciOi...` | ✅ | Mealie「用户设置 → API Tokens」的长期 Token |
-| `WEB_USER` | 自定义，如 `admin` | 建议 | 页面登录用户名 |
-| `WEB_PASSWORD` | 自定义强密码 | 建议 | 页面登录密码 |
+| `WEB_USER` | 自定义，如 `admin` | 建议 | 登录用户名 |
+| `WEB_PASSWORD` | 自定义强密码 | 建议 | 登录密码 |
 | `DEFAULT_TAG` | `下厨房` | ❌ | 默认追加的溯源标签 |
+| `SECRET_KEY` | 任意长随机串 | ❌ | 会话签名密钥。不设则**容器每次重启都要重新登录** |
 
 > ⚠️ Value 里**不要加引号**、**不要有前后空格**，Unraid 会原样写入。
 > `WEB_USER` 和 `WEB_PASSWORD` **必须成对设置**才会启用登录；不设则免登录访问。
@@ -44,7 +45,7 @@ http://你的UnraidIP:9926/
 ```
 例如 `http://192.168.1.10:9926/`
 
-- **设了登录**：浏览器弹出原生登录框，输入 `WEB_USER` / `WEB_PASSWORD`
+- **设了登录**：进入 `/login` **独立登录页**，填账号密码后进应用；右上角随时可「退出登录」
 - **没设登录**：直接进页面，顶部会有黄色「未启用登录」提醒
 
 ### 步骤 6：导入
@@ -56,9 +57,12 @@ http://你的UnraidIP:9926/
 
 ---
 
-## 🔑 登录 + Bitwarden 自动填充
+## 🔑 登录页 + Bitwarden 自动填充
 
-本工具用的是标准 **HTTP Basic Auth**，浏览器弹原生登录框，密码管理器都能识别。
+设了 `WEB_USER` / `WEB_PASSWORD` 后，访问任何页面都会**先跳到独立登录页 `/login`**，登录后再进应用。
+
+> **特意没用浏览器原生登录弹框**：那种 HTTP Basic Auth 弹框 Bitwarden 经常识别不到、不提示填充。
+> 这里是标准 HTML 表单（带 `autocomplete="username"` 与 `autocomplete="current-password"`），密码管理器能稳定识别。
 
 在 Bitwarden 新建一条登录项：
 
@@ -69,7 +73,11 @@ http://你的UnraidIP:9926/
 | 密码 | 你设的 `WEB_PASSWORD` |
 | URI | `http://192.168.1.10:9926`（换成你的实际地址，**端口要带上**） |
 
-保存后再访问该地址，Bitwarden 就会提示自动填充（手机端同样可用）。
+保存后再打开登录页，Bitwarden 就会提示自动填充（手机端同样可用）。
+
+会话保持 **30 天**，不用每次都填。
+如果用 Watchtower 之类工具自动更新镜像，建议再给容器加一个固定的 `SECRET_KEY`（任意长随机串），
+这样容器重启后不会被迫重新登录。
 
 > 修改 `WEB_USER` / `WEB_PASSWORD` 后需重启容器才生效：Docker → 点容器 → **重启**。
 
@@ -107,6 +115,7 @@ docker run -d \
   -e MEALIE_TOKEN="eyJhbGciOi..." \
   -e WEB_USER="admin" \
   -e WEB_PASSWORD="换成强密码" \
+  -e SECRET_KEY="一串任意长随机字符" \
   -e DEFAULT_TAG="下厨房" \
   ghcr.io/mjy378283319/xcf2mealie-web:latest
 
@@ -145,7 +154,7 @@ Unraid：**Docker** → 点容器名 → **日志**；或命令行 `docker logs 
 正常启动会看到：
 ```
 [xcf2mealie-web] 启动：http://0.0.0.0:9926
-[xcf2mealie-web] 登录保护已启用（用户：admin）
+[xcf2mealie-web] 登录保护已启用（用户：admin，登录页 /login）
 ```
 
 如果看到「未设置 WEB_USER/WEB_PASSWORD，当前任何人可访问」说明登录没生效。
@@ -160,8 +169,12 @@ Unraid：**Docker** → 点容器名 → **日志**；或命令行 `docker logs 
 - 容器内自测：`docker exec -it xcf2mealie-web python -c "import urllib.request;print(urllib.request.urlopen('http://127.0.0.1:9926/',timeout=3).status)"`
 
 ### 容器显示 unhealthy（红色 X）
-开启登录保护后首页会返回 **401**，这是正常现象。本镜像的健康检查脚本已把 401 判为健康；
-若仍标红，说明是旧版镜像，执行上面的「更新到最新镜像」即可。
+开启登录保护后，未登录访问首页会被**重定向**到 `/login`（HTTP 302），这是正常现象而非故障。
+本镜像的健康检查脚本已把重定向后的正常响应判为健康。若仍标红，先看日志：
+
+```bash
+docker logs --tail 50 xcf2mealie-web
+```
 
 ### 导入报 Token 401
 - Token 过期或复制时带了空格 / 换行，去 Mealie 重新生成再粘

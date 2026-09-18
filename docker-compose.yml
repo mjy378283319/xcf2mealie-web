@@ -9,9 +9,11 @@ services:
       # === 必填：你的 Mealie 地址与 Token ===
       MEALIE_URL: "https://cd.109622.xyz:9443/"
       MEALIE_TOKEN: "eyJhbGciOi...换成你的Token"
-      # === 可选：页面登录账号（两个都设置才会启用 Basic Auth）===
+      # === 可选：页面登录账号（两个都设置才会启用登录页）===
       WEB_USER: ""
       WEB_PASSWORD: ""
+      # === 可选：会话签名密钥（不设则容器重启后需重新登录）===
+      SECRET_KEY: ""
       # === 可选：默认追加的标签 ===
       DEFAULT_TAG: "下厨房"
       # === 可选：自定义端口 ===

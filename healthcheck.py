@@ -1,7 +1,8 @@
 """容器健康检查：Flask 在监听且能响应，即视为健康。
 
-开启 Basic Auth（WEB_USER/WEB_PASSWORD）后，首页对未认证请求返回 401。
-这属于「服务正常、需要登录」，不能判为 unhealthy，否则 Docker/Unraid 会把容器标红。
+开启登录保护（WEB_USER/WEB_PASSWORD）后，未登录访问首页会被重定向到 /login。
+urllib 默认跟随重定向，最终拿到 200；即便拿到 401/403（需要登录）也应判为健康，
+否则 Docker/Unraid 会把正常容器标成 unhealthy。
 """
 import os
 import sys

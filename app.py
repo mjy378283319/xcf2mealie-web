@@ -7,28 +7,41 @@
   MEALIE_TOKEN    Mealie API Token（可选，不在容器配也能在表单里临时粘）
   DEFAULT_TAG     默认追加标签，默认「下厨房」
   PORT            监听端口，默认 9926
-  WEB_USER        登录用户名（设置后启用 Basic Auth，不设置则免登录）
-  WEB_PASSWORD    登录密码（配合 WEB_USER 使用）
+  WEB_USER        登录用户名（与 WEB_PASSWORD 同时设置才启用登录页）
+  WEB_PASSWORD    登录密码（登录页形式，非浏览器原生弹框，便于 Bitwarden 自动填充）
+  SECRET_KEY      会话签名密钥（可选；不设则每次重启要重新登录）
 """
 import os
 import sys
+import time
 import secrets
 import shutil
 import subprocess
 import tempfile
-from datetime import datetime
+from datetime import datetime, timedelta
 
-from flask import Flask, Response, render_template_string, request
+from flask import Flask, render_template_string, redirect, request, session, url_for
 
 APP_DIR = os.path.dirname(os.path.abspath(__file__))
 SCRIPT = os.path.join(APP_DIR, "xcf2mealie.py")
 DEFAULT_TAG = os.environ.get("DEFAULT_TAG", "下厨房")
 PORT = int(os.environ.get("PORT", "9926"))
 
-# Basic Auth 凭据：两个都非空才启用；WEB_PASS 作为 WEB_PASSWORD 的别名
+# 登录凭据：两个都非空才启用登录页；WEB_PASS 作为 WEB_PASSWORD 的别名
 WEB_USER = (os.environ.get("WEB_USER") or "").strip()
 WEB_PASS = (os.environ.get("WEB_PASSWORD") or os.environ.get("WEB_PASS") or "")
 AUTH_ENABLED = bool(WEB_USER and WEB_PASS)
+
+# 会话签名密钥：未显式设置则随机生成（代价是容器重启后需要重新登录）
+SECRET_KEY = os.environ.get("SECRET_KEY") or secrets.token_hex(32)
+
+app = Flask(__name__)
+app.config.update(
+    SECRET_KEY=SECRET_KEY,
+    SESSION_COOKIE_HTTPONLY=True,
+    SESSION_COOKIE_SAMESITE="Lax",
+    PERMANENT_SESSION_LIFETIME=timedelta(days=30),
+)
 
 # --------------------------------------------------------------------------- #
 # 页面模板（内联，避免依赖 templates 目录）
@@ -58,6 +71,9 @@ INDEX_HTML = """<!doctype html>
   .btn:disabled{background:#999;cursor:not-allowed}
   .note{background:#fff7e6;border:1px solid #ffd591;padding:12px 14px;border-radius:6px;font-size:13px;color:#874d00;margin-bottom:16px}
   .ok{background:#f6ffed;border:1px solid #b7eb8f;padding:12px 14px;border-radius:6px;font-size:13px;color:#237804;margin-bottom:16px}
+  .topbar{display:flex;justify-content:space-between;align-items:center;background:#f6ffed;border:1px solid #b7eb8f;color:#237804;border-radius:6px;padding:9px 14px;font-size:13px;margin-bottom:16px}
+  .topbar b{color:#237804}
+  .topbar .logout{color:#1677ff;font-size:13px;font-weight:500}
   .meta{color:#888;font-size:12px;margin-top:8px}
   small.hint{color:#888;font-weight:400}
   code{background:#f2f2f2;padding:1px 5px;border-radius:3px;font-size:12px}
@@ -68,7 +84,10 @@ INDEX_HTML = """<!doctype html>
 <div class="sub">粘贴下厨房菜谱链接，每行一个，点确定即可批量抓取并导入到你的 Mealie。</div>
 
 {% if auth_enabled %}
-<div class="ok">已启用登录保护 · 当前用户 <code>{{ web_user }}</code></div>
+<div class="topbar">
+  <span class="who">已登录：<b>{{ current_user }}</b></span>
+  <a class="logout" href="/logout">退出登录</a>
+</div>
 {% else %}
 <div class="note">当前<b>未启用登录</b>：任何人都能访问本页面。建议在容器里设置 <code>WEB_USER</code> 与 <code>WEB_PASSWORD</code> 两个环境变量后再重启容器。</div>
 {% endif %}
@@ -177,35 +196,110 @@ RESULT_HTML = """<!doctype html>
 </html>
 """
 
-app = Flask(__name__)
+# --------------------------------------------------------------------------- #
+# 独立登录页 + Flask Session 鉴权
+#
+#   刻意不用 HTTP Basic Auth：浏览器原生的那种登录弹框，Bitwarden 经常识别不到、
+#   不会提示填充。改用标准 HTML 表单（autocomplete="username" / "current-password"），
+#   密码管理器才能正常抓取字段并自动填充。
+# --------------------------------------------------------------------------- #
 
-# --------------------------------------------------------------------------- #
-# Basic Auth（便于 Bitwarden 等密码管理器自动填充）
-# --------------------------------------------------------------------------- #
+LOGIN_HTML = """<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>登录 · 下厨房 → Mealie</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<style>
+  *{box-sizing:border-box}
+  body{font-family:system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",sans-serif;background:#fafafa;color:#222;margin:0;padding:48px 16px;line-height:1.55}
+  .login-card{background:#fff;border:1px solid #eaeaea;border-radius:10px;max-width:380px;margin:0 auto;padding:28px 26px;box-shadow:0 2px 8px rgba(0,0,0,.05)}
+  h1{font-size:19px;margin:0 0 4px}
+  .sub{color:#777;font-size:13px;margin-bottom:20px}
+  label{display:block;font-size:13px;color:#444;margin:0 0 6px;font-weight:500}
+  .row{margin-bottom:16px}
+  input[type=text],input[type=password]{width:100%;padding:11px 12px;border:1px solid #d0d0d0;border-radius:6px;font-size:14px;background:#fff;color:#222}
+  input[type=text]:focus,input[type=password]:focus{outline:none;border-color:#1677ff;box-shadow:0 0 0 3px rgba(22,119,255,.12)}
+  .btn{background:#1677ff;color:#fff;border:0;padding:11px 0;width:100%;border-radius:6px;font-size:15px;font-weight:600;cursor:pointer;letter-spacing:.5px}
+  .btn:hover{background:#0958d9}
+  .banner.bad{background:#fff2f0;border:1px solid #ffccc7;color:#a8071a;padding:10px 13px;border-radius:6px;font-size:13px;margin-bottom:16px}
+  .tip{margin-top:18px;padding-top:14px;border-top:1px solid #f0f0f0;color:#999;font-size:12px;text-align:center}
+</style>
+</head>
+<body>
+<div class="login-card">
+  <h1>下厨房 → Mealie</h1>
+  <div class="sub">请输入账号后继续使用</div>
+
+  {% if error %}<div class="banner bad">{{ error }}</div>{% endif %}
+
+  <form method="post" action="/login">
+    <input type="hidden" name="next" value="{{ next }}">
+    <div class="row">
+      <label for="username">用户名</label>
+      <input type="text" id="username" name="username" autocomplete="username"
+             autocapitalize="off" spellcheck="false" required autofocus>
+    </div>
+    <div class="row">
+      <label for="password">密码</label>
+      <input type="password" id="password" name="password" autocomplete="current-password" required>
+    </div>
+    <button type="submit" class="btn">登 录</button>
+  </form>
+
+  <div class="tip">支持 Bitwarden / 浏览器密码管理器自动填充</div>
+</div>
+</body>
+</html>
+"""
 
 def _authorized(u: str, p: str) -> bool:
     if not AUTH_ENABLED:
         return True
-    ok_u = secrets.compare_digest(u or "", WEB_USER)
-    ok_p = secrets.compare_digest(p or "", WEB_PASS)
-    return ok_u and ok_p
+    return (secrets.compare_digest(u or "", WEB_USER)
+            and secrets.compare_digest(p or "", WEB_PASS))
 
 
 @app.before_request
 def _require_auth():
     if not AUTH_ENABLED:
         return None
-    auth = request.authorization
-    if auth and _authorized(auth.username, auth.password):
+    if request.endpoint in ("login", "logout", "static"):
         return None
-    return Response(
-        "需要登录",
-        401,
-        {
-            "WWW-Authenticate": 'Basic realm="xcf2mealie-web", charset="UTF-8"',
-            "Content-Type": "text/plain; charset=utf-8",
-        },
-    )
+    if session.get("authed"):
+        return None
+    target = request.full_path if request.query_string else request.path
+    return redirect(url_for("login", next=target))
+
+
+@app.route("/login", methods=["GET", "POST"])
+def login():
+    if not AUTH_ENABLED:
+        return redirect(url_for("index"))
+    if session.get("authed"):
+        return redirect(url_for("index"))
+
+    nxt = request.args.get("next") or request.form.get("next") or url_for("index")
+    error = None
+
+    if request.method == "POST":
+        u = (request.form.get("username") or "").strip()
+        p = request.form.get("password") or ""
+        if _authorized(u, p):
+            session.permanent = True
+            session["authed"] = True
+            session["user"] = u
+            return redirect(nxt)
+        time.sleep(1.2)          # 简单限速，别让人暴力试密码
+        error = "用户名或密码错误"
+
+    return render_template_string(LOGIN_HTML, error=error, next=nxt)
+
+
+@app.route("/logout")
+def logout():
+    session.clear()
+    return redirect(url_for("login"))
 
 
 # --------------------------------------------------------------------------- #
@@ -257,7 +351,7 @@ def index():
         has_token=bool(os.environ.get("MEALIE_TOKEN")),
         default_tag=DEFAULT_TAG,
         auth_enabled=AUTH_ENABLED,
-        web_user=WEB_USER or "-",
+        current_user=session.get("user") or WEB_USER or "-",
     )
 
 
@@ -340,7 +434,7 @@ def do_import():
 if __name__ == "__main__":
     print(f"[xcf2mealie-web] 启动：http://0.0.0.0:{PORT}", flush=True)
     if AUTH_ENABLED:
-        print(f"[xcf2mealie-web] 登录保护已启用（用户：{WEB_USER}）", flush=True)
+        print(f"[xcf2mealie-web] 登录保护已启用（用户：{WEB_USER}，登录页 /login）", flush=True)
     else:
         print("[xcf2mealie-web] 警告：未设置 WEB_USER/WEB_PASSWORD，当前任何人可访问！", flush=True)
     app.run(host="0.0.0.0", port=PORT, debug=False)

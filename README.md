@@ -14,7 +14,7 @@
 - ⏱️ **时间估算**：prep / cook / total 自动计算
 - 🏷️ **tags / 分类 / 封面**：源页结构化信息全保留
 - ♻️ **自动去重**：Mealie 里已存在的菜谱自动跳过，不会重复添加（可强制覆盖）
-- 🔐 **双重安全**：Token 走容器环境变量不进镜像；页面可加账号密码，**兼容 Bitwarden 自动填充**
+- 🔐 **双重安全**：Token 走容器环境变量不进镜像；可开启**独立登录页**（表单式，Bitwarden 可自动填充）
 - 🐳 **多架构镜像**：自动构建 `linux/amd64` + `linux/arm64`（Unraid x86_64 直接用）
 
 ## 🚀 快速开始（docker run）
@@ -73,15 +73,19 @@ docker run -d --name xcf2mealie -p 9926:9926 \
 |---|---|---|
 | `MEALIE_URL` | ✅ | Mealie 实例完整 URL，如 `https://cd.example.com:9443/` |
 | `MEALIE_TOKEN` | ✅ | Mealie「用户设置 → API Tokens → Long Lived Token」 |
-| `WEB_USER` | ❌ | 页面登录用户名。**与 `WEB_PASSWORD` 同时设置才启用登录**，不设则任何人可访问 |
-| `WEB_PASSWORD` | ❌ | 页面登录密码（也可写作 `WEB_PASS`） |
+| `WEB_USER` | ❌ | 登录用户名。**与 `WEB_PASSWORD` 同时设置才启用登录**，不设则免登录 |
+| `WEB_PASSWORD` | ❌ | 登录密码（也可写作 `WEB_PASS`） |
+| `SECRET_KEY` | ❌ | 会话签名密钥。不设则容器重启后需要重新登录（推荐用 Watchtower 自动更新时设置） |
 | `DEFAULT_TAG` | ❌ | 每个菜谱默认追加的标签，默认 `下厨房` |
 | `PORT` | ❌ | Web UI 端口，默认 `9926` |
 
 ## 🔑 登录保护 + Bitwarden 自动填充
 
-设置 `WEB_USER` + `WEB_PASSWORD` 重启容器后，访问页面会弹出浏览器原生登录框。
-这种标准 **HTTP Basic Auth** 弹框能被密码管理器完美识别：
+设置 `WEB_USER` + `WEB_PASSWORD` 后重启容器，访问任意页面会先跳到 **独立的登录页**（`/login`），登录成功再进应用，右上角可随时「退出登录」。
+
+> **为什么不用浏览器原生登录弹框？**
+> 那种 HTTP Basic Auth 弹框 Bitwarden 常常识别不到、不会提示填充。这里改用标准 HTML 表单，
+> 带 `autocomplete="username"` / `autocomplete="current-password"`，密码管理器能稳定抓取字段。
 
 在 Bitwarden 里新建一条登录项：
 
@@ -92,9 +96,12 @@ docker run -d --name xcf2mealie -p 9926:9926 \
 | 密码 | 你设的 `WEB_PASSWORD` |
 | URI | `http://192.168.x.x:9926`（你的实际访问地址，端口要带上） |
 
-保存后再打开页面，Bitwarden 就会提示自动填充。手机端 Bitwarden 同样可用。
+保存后再打开 `/login` 页，Bitwarden 就会提示自动填充，手机端同样可用。
 
-> 未设置这两个变量时页面免登录，首页顶部会显示黄色提醒条。
+会话有效期 **30 天**（`PERMANENT_SESSION_LIFETIME`），不用每次都填。
+若希望容器重启后仍保持登录，给容器加一个固定的 `SECRET_KEY`（任意长随机串即可）。
+
+> 未设置 `WEB_USER`/`WEB_PASSWORD` 时免登录访问，首页顶部会显示黄色提醒条。
 
 ## ♻️ 去重逻辑
 
@@ -126,9 +133,9 @@ docker run -d --name xcf2mealie -p 9926:9926 \
 
 ```
 xcf2mealie_web/
-├── app.py                 # Flask 主程序（UI 内联 + Basic Auth + 去重开关）
+├── app.py                 # Flask 主程序（UI 内联 + 独立登录页/Session 鉴权 + 去重开关）
 ├── xcf2mealie.py          # 核心导入逻辑（命令行工具）
-├── healthcheck.py         # 容器健康检查（开启登录时 401 也判健康）
+├── healthcheck.py         # 容器健康检查（登录页会 302，同样判为健康）
 ├── requirements.txt       # Python 依赖（仅 flask）
 ├── Dockerfile             # 镜像构建
 ├── docker-compose.yml     # compose 部署（可选）
